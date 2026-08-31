@@ -100,6 +100,10 @@ export async function adminUpdateUserAction(userId: string, rawInput: UserInput)
     if (emailError) return { success: false, error: emailError.message };
   }
 
+  // full_name/role changes here also propagate into auth.users' metadata via
+  // the on_public_user_updated trigger (0009_sync_user_metadata.sql) — no
+  // separate Admin API call needed, and the same trigger covers a direct
+  // edit to public.users made outside this action too.
   const { error: updateError } = await supabase
     .from('users')
     .update({ full_name: input.fullName, role: input.role, is_active: input.isActive })

@@ -97,6 +97,7 @@ order:
 | `0006_analytics.sql` | Admin analytics RPCs: `get_occupancy_trend`, `get_activity_log` |
 | `0007_floor_plan.sql` | Custom per-location floor plan support: `locations.layout_mode`/`floor_plan_path`, `seats.pos_x`/`pos_y`, a public `floor-plans` Storage bucket with admin-only write policies, and the RPCs behind it |
 | `0008_admin_master_data.sql` | `users.is_active` (+ a trigger syncing login-email changes into `public.users`), `admin_set_user_active`/`admin_upsert_seat` RPCs, deactivated-account checks in the booking/release/request RPCs, and the seat-release **merge fix** (see § 10 below) |
+| `0009_sync_user_metadata.sql` | Trigger syncing `public.users.full_name`/`role` into `auth.users.raw_user_meta_data` both when edited via the app and via direct Supabase edits, plus a one-time backfill (see § 9.3) |
 
 ### Option A — Supabase CLI (recommended)
 
@@ -188,13 +189,53 @@ Supabase — both are one-time admin steps outside this codebase:
    to *this* app's `/auth/callback` route after completing the Microsoft
    handshake.
 
-### 6.3 First sign-in behavior
+### 6.3 How a Microsoft sign-in maps to a user in this system
+
+There's no custom mapping code in this app for this — it's entirely
+Supabase Auth's built-in identity linking, keyed on **email**:
+
+- **Email already exists** (e.g. you created the user via Master Data or
+  `npm run seed:users` first, then they later click "Continue with
+  Microsoft"): Supabase matches the email from the Microsoft token against
+  the existing `auth.users` row and **links** the Microsoft identity to
+  that *same* account — same `id`, same role, same default seat, same
+  booking history. Nothing new is created. This works because every
+  account this app creates already has `email_confirm: true` (see
+  `adminCreateUserAction` / `scripts/seed-users.mjs`) — Supabase requires
+  the existing account's email to be confirmed before it will auto-link a
+  new provider to it, otherwise it treats it as a conflict.
+- **Email doesn't exist yet**: Supabase creates a brand-new `auth.users`
+  row with that email. Our `handle_new_user` trigger fires exactly like any
+  other sign-up, creating a `public.users` row with role `EMPLOYEE` and no
+  default seat. An admin then assigns their seat from **Master Data** or
+  **Reassign Seats**.
+
+**Which email Supabase actually reads from the Microsoft token**: with the
+`scopes: 'email openid profile'` we request (see `src/app/login/page.tsx`),
+Supabase's `azure` provider uses the `email` claim from Microsoft's ID
+token. In most tenants this is the user's real mailbox address and matches
+what you'd expect. The gotcha: some Entra ID tenants have a **User
+Principal Name (UPN)** that differs from the user's actual email (e.g. a
+guest account, or a UPN like `j.doe@tenant.onmicrosoft.com` while their real
+mail is `j.doe@yourcompany.com`) — if the `email` claim ends up empty or
+different from the address you used to create their account here, Supabase
+won't find a match and will create a *second*, separate account instead of
+linking to the existing one. To confirm this won't happen for your tenant:
+in **Entra ID → App registrations → your app → Token configuration**, make
+sure an `email` optional claim is added and that each user's `mail`
+attribute (not just their UPN) is populated. If you do end up with a
+duplicate account from a mismatch, an admin can fix it from **Master Data**
+by updating the *older* (correct) account's default seat/role as needed and
+deactivating the accidental duplicate.
+
+### 6.4 First sign-in behavior & promoting an admin
 
 A user signing in with Microsoft for the first time gets a `public.users`
 row auto-created (via the `handle_new_user` trigger) with role `EMPLOYEE`
 and no default seat — same as any new sign-up. Have an admin assign their
-default seat from **Reassign Seats**, or promote them to `ADMIN` directly
-in Supabase (`update users set role = 'ADMIN' where email = '...'`).
+default seat from **Master Data** or **Reassign Seats**, or promote them to
+`ADMIN` from the Master Data **Users** tab (editing role directly in
+Supabase also works and now stays in sync — see § 9.3).
 
 Password and magic-link sign-in stay available alongside Microsoft SSO — if
 you want Microsoft to be the *only* way in, that's a follow-up (hide the
@@ -299,6 +340,36 @@ Setting a user **Active = false** (individually, or via bulk import):
   rule holds even if something bypassed the UI/middleware.
 
 Reactivating flips all of this back (`ban_duration: 'none'`).
+
+### 9.3 Staying in sync with Authentication → Users
+
+Editing a user from Master Data (or editing `public.users` directly in
+Supabase — the Table Editor or a raw SQL `update`) keeps the account shown
+under **Authentication → Users** consistent, with one asymmetry worth
+understanding:
+
+- **Full name & role**: sync **both ways**, automatically, via the
+  `on_public_user_updated` trigger (`0009_sync_user_metadata.sql`). Change
+  either one from Master Data, or edit `public.users.full_name` /
+  `public.users.role` directly in Supabase — either path updates
+  `auth.users.raw_user_meta_data` (visible in that user's detail view under
+  Authentication → Users) to match, immediately.
+- **Email**: sync **one way only** — from the Admin Panel down. Editing a
+  user's email in Master Data calls the Auth Admin API
+  (`admin.auth.admin.updateUserById`), which is the only correct way to
+  change a *login* email — it's what enforces uniqueness, confirmation
+  state, and keeps linked identities (password, Microsoft, magic link) all
+  pointed at the right account. That API call is what actually updates
+  Authentication → Users, and a trigger then mirrors the result back into
+  `public.users.email` for display. Editing `public.users.email` directly
+  in Supabase does **not** change the login email — the account will still
+  sign in with its old address, now showing a different (unsynced) email in
+  our table. Always change email through Master Data, not raw SQL.
+- **Active/Inactive**: same asymmetry as email, for the same reason — Master
+  Data's toggle both sets `public.users.is_active` and bans/unbans the
+  account via the Admin API; flipping `is_active` directly in Supabase only
+  affects this app's own enforcement (middleware + the RPC checks), not
+  whether Supabase Auth itself still accepts their login.
 
 ---
 
