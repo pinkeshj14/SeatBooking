@@ -65,6 +65,8 @@ export function SeatDetailsDialog({
   const [confirmRange, setConfirmRange] = useState({ from: selectedDate, till: selectedDate });
   const [reason, setReason] = useState('');
 
+  const isOwnConfirmedBooking = status === 'OWN' && !seat?.is_reserved_pending;
+
   // This dialog instance stays mounted across seat selections (only `open`
   // toggles), so without this the date range from the last action (e.g. a
   // multi-day release) would silently carry over to the next seat's dialog.
@@ -72,6 +74,15 @@ export function SeatDetailsDialog({
   useEffect(() => {
     if (open) {
       let bookable = selectedDate;
+      // If the viewed date is already booked (own seat), there's nothing to
+      // confirm there — default the "book more days" picker to the next day
+      // instead of a date that's already taken care of.
+      if (isOwnConfirmedBooking) {
+        bookable = new Date(bookable);
+        do {
+          bookable.setDate(bookable.getDate() + 1);
+        } while (bookable.getDay() === 0 || bookable.getDay() === 6);
+      }
       if (bookingWindow) {
         if (bookable < bookingWindow.minDate) bookable = bookingWindow.minDate;
         if (bookable > bookingWindow.maxDate) bookable = bookingWindow.maxDate;
@@ -91,7 +102,6 @@ export function SeatDetailsDialog({
 
   const style = SEAT_STATUS_STYLES[status];
   const dateStr = format(selectedDate, 'yyyy-MM-dd');
-  const isOwnConfirmedBooking = status === 'OWN' && !seat.is_reserved_pending;
   const isOwnPendingReservation = status === 'OWN' && seat.is_reserved_pending;
 
   function fmt(d: Date) {
@@ -168,17 +178,23 @@ export function SeatDetailsDialog({
           <DialogDescription>
             {isOwnPendingReservation
               ? `Reserved for you on ${dateStr} — not booked yet. Confirm it below, or release it if you won't need it.`
-              : seat.occupant_name
-                ? `Currently held by ${seat.occupant_name} on ${dateStr}.`
-                : `Unassigned seat, available on ${dateStr}.`}
+              : isOwnConfirmedBooking
+                ? `You're booked in this seat on ${dateStr}. Book more days below, or release this date.`
+                : seat.occupant_name
+                  ? `Currently held by ${seat.occupant_name} on ${dateStr}.`
+                  : `Unassigned seat, available on ${dateStr}.`}
           </DialogDescription>
         </DialogHeader>
 
-        {isOwnPendingReservation && (
+        {status === 'OWN' && (
           <div className="space-y-3 rounded-lg border p-3">
             <p className="flex items-center gap-1.5 text-sm font-medium">
               <CalendarClock className="h-4 w-4" />
-              Confirm your booking
+              {isOwnPendingReservation ? 'Confirm your booking' : 'Book additional days'}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Book this seat for any day in the next 3 working days — including days beyond{' '}
+              {dateStr} you haven&apos;t booked yet.
             </p>
             <FromTillPicker
               from={confirmRange.from}
@@ -190,14 +206,15 @@ export function SeatDetailsDialog({
             />
             <Button size="sm" className="w-full" onClick={handleConfirmBooking} disabled={pending}>
               {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Book this seat
+              Book seat
             </Button>
           </div>
         )}
 
         {status === 'OWN' && (
           <div className="space-y-4">
-            {isOwnPendingReservation && <Separator />}
+            <Separator />
+            <p className="text-sm font-medium">Release</p>
             <p className="text-sm text-muted-foreground">
               {isOwnConfirmedBooking
                 ? 'You have this seat booked. Release it so a colleague can use it instead.'
@@ -271,7 +288,7 @@ export function SeatDetailsDialog({
 
         <DialogFooter>
           {status === 'OWN' && (
-            <Button onClick={handleRelease} disabled={pending} variant={isOwnPendingReservation ? 'outline' : 'default'}>
+            <Button onClick={handleRelease} disabled={pending} variant="outline">
               {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Release seat
             </Button>
