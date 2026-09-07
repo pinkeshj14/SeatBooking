@@ -114,7 +114,7 @@ export function MySeatPanel({ defaultSeatNumber, defaultLocationName, releases, 
             Upcoming bookings
           </p>
           {bookings.length === 0 && (
-            <p className="text-sm text-muted-foreground">No upcoming bookings elsewhere.</p>
+            <p className="text-sm text-muted-foreground">No upcoming bookings yet.</p>
           )}
           <div className="space-y-2">
             {bookings.map((b) => (

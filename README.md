@@ -96,8 +96,9 @@ order:
 | `0005_realtime.sql` | Adds `bookings`, `seat_releases`, `seat_requests` to the Realtime publication |
 | `0006_analytics.sql` | Admin analytics RPCs: `get_occupancy_trend`, `get_activity_log` |
 | `0007_floor_plan.sql` | Custom per-location floor plan support: `locations.layout_mode`/`floor_plan_path`, `seats.pos_x`/`pos_y`, a public `floor-plans` Storage bucket with admin-only write policies, and the RPCs behind it |
-| `0008_admin_master_data.sql` | `users.is_active` (+ a trigger syncing login-email changes into `public.users`), `admin_set_user_active`/`admin_upsert_seat` RPCs, deactivated-account checks in the booking/release/request RPCs, and the seat-release **merge fix** (see § 10 below) |
-| `0009_sync_user_metadata.sql` | Trigger syncing `public.users.full_name`/`role` into `auth.users.raw_user_meta_data` both when edited via the app and via direct Supabase edits, plus a one-time backfill (see § 9.3) |
+| `0008_admin_master_data.sql` | `users.is_active` (+ a trigger syncing login-email changes into `public.users`), `admin_set_user_active`/`admin_upsert_seat` RPCs, deactivated-account checks in the booking/release/request RPCs, and the seat-release **merge fix** (see § 11 below) |
+| `0009_sync_user_metadata.sql` | Trigger syncing `public.users.full_name`/`role` into `auth.users.raw_user_meta_data` both when edited via the app and via direct Supabase edits, plus a one-time backfill (see § 10.3) |
+| `0010_daily_booking.sql` | Converts default-seat occupancy from permanent to a **daily booking model**: `get_booking_window()`/`reservation_cutoff()`/working-day helpers, a re-derived `get_seat_map()` (real booking > owner's pre-cutoff reservation > available), the 3-working-day booking window + weekend guard in `book_seat_range()`, and a `release_seat_range()` fix so releasing also cancels a real booking (see § 8 below) |
 
 ### Option A — Supabase CLI (recommended)
 
@@ -235,7 +236,7 @@ row auto-created (via the `handle_new_user` trigger) with role `EMPLOYEE`
 and no default seat — same as any new sign-up. Have an admin assign their
 default seat from **Master Data** or **Reassign Seats**, or promote them to
 `ADMIN` from the Master Data **Users** tab (editing role directly in
-Supabase also works and now stays in sync — see § 9.3).
+Supabase also works and now stays in sync — see § 10.3).
 
 Password and magic-link sign-in stay available alongside Microsoft SSO — if
 you want Microsoft to be the *only* way in, that's a follow-up (hide the
@@ -261,7 +262,75 @@ you've added to Supabase Auth manually.
 
 ---
 
-## 8. Using a custom floor plan image instead of the default grid
+## 8. The daily booking model
+
+Default seats are no longer permanently occupied — every user still has a
+designated (owned) seat, but each day's occupancy now has to be booked
+explicitly. This affects both employees and how the floor map derives what
+"occupied" means.
+
+### 8.1 The rules, as implemented
+
+1. **Ownership, with an exclusivity window.** Your default seat is reserved
+   for you and only you until **9:00 PM the day before** the date in
+   question (`reservation_cutoff()` — defaults to `Asia/Kolkata`; see the
+   comment in `0010_daily_booking.sql` if your office is elsewhere). Before
+   that cutoff, nobody else can book it directly — they'd need to use
+   **Request seat** (peer transfer, unchanged) and get your approval. This
+   reservation is *virtual*: no row is created for it, so it costs nothing
+   and expires automatically.
+2. **Booking is always explicit**, including for your own seat. Reaching
+   the cutoff doesn't auto-book anything — if you haven't confirmed by
+   9 PM, your seat just becomes open to everyone, including you (you'd then
+   book it the same way as any other open seat, if it's still in the
+   3-day window).
+3. **3 working days, starting today.** The bookable window is today (if
+   it's a working day, else the next one) plus the following 2 working
+   days — `get_booking_window()` is the single source of truth, used by
+   both the RPC guard (`book_seat_range`) and the date pickers client-side.
+4. **Weekdays only.** Saturday/Sunday are never bookable; `book_seat_range`
+   rejects them and the booking date pickers disable them.
+5. **Release still works exactly as before** — no window/weekday
+   restriction on releasing, and it now also cancels a real booking on the
+   released dates if one exists (not just the virtual reservation), so it
+   reliably frees the seat either way.
+
+None of this applies to admin actions (Master Data, Force book/release,
+manual reassignment) — those remain completely unrestricted, matching
+existing admin behavior elsewhere in the app.
+
+### 8.2 What this looks like on the floor map
+
+- A seat with no booking, still inside its owner's exclusivity window,
+  shows **Occupied** with the owner's name and a **dashed border** — it's
+  reserved but not booked. Everyone else sees the same "Request seat" flow
+  as an actually-booked seat.
+- The owner sees that same seat as **"Your seat"** with a **Confirm your
+  booking** panel in the seat dialog (a `From`/`Till` picker scoped to the
+  3-day window) in addition to the existing **Release** option.
+- Once booked (by anyone) or once the cutoff passes with nothing booked,
+  the dashed border goes away — it's a real booking or plain **Available**.
+
+### 8.3 A day in the life of one seat
+
+Employee A's default seat, checked on different days:
+
+- **Today, checked in the morning**: A hasn't booked. Today's cutoff was
+  9 PM *yesterday*, already passed — so the seat shows **Available** to
+  everyone right now, including A (who books it like anyone else).
+- **Tomorrow, checked today**: still inside A's exclusivity window (9 PM
+  tonight hasn't passed) — shows **Occupied / A (reserved)**, dashed
+  border. Only A can book it directly; anyone else must use Request seat.
+- **9:05 PM today, still unbooked for tomorrow**: cutoff passed — the same
+  seat now shows plain **Available** to everyone, A included.
+- **A releases tomorrow at 3 PM instead of booking it**: identical
+  end-state to the above (Available to everyone) — release just makes it
+  happen immediately rather than waiting for the cutoff, and works whether
+  or not A had already confirmed a real booking.
+
+---
+
+## 9. Using a custom floor plan image instead of the default grid
 
 Every location starts on a uniform 5×10 grid. To match a real floor plan
 (a CAD export, a photo of your seating chart, etc.) instead:
@@ -283,12 +352,12 @@ Every location starts on a uniform 5×10 grid. To match a real floor plan
 
 Note: this feature only repositions existing seats on an image — it doesn't
 rename them. To match seat codes on your own floor plan (e.g. `WS-008`,
-`CB-006`), rename seats from **Master Data** (§ 9 below) instead of editing
+`CB-006`), rename seats from **Master Data** (§ 10 below) instead of editing
 the database directly.
 
 ---
 
-## 9. Master Data: managing users & seats from the Admin Panel
+## 10. Master Data: managing users & seats from the Admin Panel
 
 Everything under **Master Data** (`/admin/master-data`) is meant to remove
 any need to touch the database directly for day-to-day changes.
@@ -301,12 +370,12 @@ any need to touch the database directly for day-to-day changes.
   **Active** on/off the same way.
 - Deactivating a user immediately bans their Supabase Auth account (they're
   signed out and blocked from signing back in) in addition to hiding them
-  from being treated as active in booking/release logic — see § 9.2.
+  from being treated as active in booking/release logic — see § 10.2.
 - Creating a user provisions a real Supabase Auth account with a random
   password that's never shown or needed — the new user just signs in via
   **Magic Link** (or Microsoft SSO, once configured) using their email.
 
-### 9.1 Export to Excel / bulk upload
+### 10.1 Export to Excel / bulk upload
 
 - **Export to Excel** downloads one workbook with two sheets, **Users** and
   **Seats**, using exactly the columns the importer expects (including a
@@ -326,7 +395,7 @@ any need to touch the database directly for day-to-day changes.
   3. Shows a per-row result (created / updated / failed with the specific
      error) after applying, so bulk updates are auditable, not a black box.
 
-### 9.2 Account deactivation, end to end
+### 10.2 Account deactivation, end to end
 
 Setting a user **Active = false** (individually, or via bulk import):
 
@@ -341,7 +410,7 @@ Setting a user **Active = false** (individually, or via bulk import):
 
 Reactivating flips all of this back (`ban_duration: 'none'`).
 
-### 9.3 Staying in sync with Authentication → Users
+### 10.3 Staying in sync with Authentication → Users
 
 Editing a user from Master Data (or editing `public.users` directly in
 Supabase — the Table Editor or a raw SQL `update`) keeps the account shown
@@ -373,7 +442,7 @@ understanding:
 
 ---
 
-## 10. How the core rules are implemented
+## 11. How the core rules are implemented
 
 - **Seat status** is derived on read, not stored, via the `get_seat_map(location_id, date)`
   SQL function: a seat is occupied if there's a `CONFIRMED` booking that
@@ -409,7 +478,7 @@ understanding:
 
 ---
 
-## 11. Deploying to Vercel
+## 12. Deploying to Vercel
 
 1. Push this repo to GitHub/GitLab/Bitbucket.
 2. In [vercel.com/new](https://vercel.com/new), import the repo.
@@ -457,5 +526,7 @@ src/
   lib/
     supabase/                  Browser / server / middleware / service-role Supabase clients
     master-data/schema.ts      Excel column definitions + row validation (shared by export & import)
-  types/database.ts            Hand-written types mirroring the SQL schema
+  types/
+    database.ts                Hand-written types mirroring the SQL schema
+    booking-window.ts           {minDate, maxDate} shared between FloorMap and SeatDetailsDialog
 ```

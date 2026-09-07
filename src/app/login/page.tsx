@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useState, useTransition } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -35,6 +35,7 @@ function LoginForm() {
   );
   const [magicLinkSent, setMagicLinkSent] = useState(false);
   const [ssoLoading, setSsoLoading] = useState(false);
+  const [navigating, startNavigating] = useTransition();
 
   async function handleMicrosoftSignIn() {
     setSsoLoading(true);
@@ -60,13 +61,17 @@ function LoginForm() {
     setError(null);
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
     if (error) {
+      setLoading(false);
       setError(error.message);
       return;
     }
-    router.push(redirectTo);
-    router.refresh();
+    // Keep the spinner going through the redirect itself — clearing it as
+    // soon as the auth call resolves left a stretch where the button looked
+    // idle again while the destination page was still loading.
+    startNavigating(() => {
+      router.push(redirectTo);
+    });
   }
 
   async function handleMagicLink(e: React.FormEvent) {
@@ -155,8 +160,8 @@ function LoginForm() {
                     required
                   />
                 </div>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <Button type="submit" className="w-full" disabled={loading || navigating}>
+                  {(loading || navigating) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Sign in
                 </Button>
               </form>

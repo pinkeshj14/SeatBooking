@@ -9,6 +9,7 @@ import { SeatDetailsDialog } from '@/components/floor-map/seat-details-dialog';
 import { FloorMapLegend } from '@/components/floor-map/legend';
 import { deriveSeatStatus } from '@/lib/seat-status';
 import type { LayoutMode, SeatMapRow } from '@/types/database';
+import type { BookingWindow } from '@/types/booking-window';
 
 interface Employee {
   id: string;
@@ -26,6 +27,8 @@ interface Props {
   viewingDate: Date;
   isAdmin?: boolean;
   employees?: Employee[];
+  /** Employee-facing booking window (next 3 working days); omitted/null for admin, who is unrestricted. */
+  bookingWindow?: BookingWindow | null;
 }
 
 export function FloorMap({
@@ -39,6 +42,7 @@ export function FloorMap({
   viewingDate,
   isAdmin = false,
   employees = [],
+  bookingWindow = null,
 }: Props) {
   const router = useRouter();
   const [selectedSeat, setSelectedSeat] = useState<SeatMapRow | null>(null);
@@ -96,6 +100,7 @@ export function FloorMap({
         isCrossLocation={currentUserDefaultLocationId !== null && currentUserDefaultLocationId !== locationId}
         isAdmin={isAdmin}
         employees={employees}
+        bookingWindow={bookingWindow}
       />
     </div>
   );

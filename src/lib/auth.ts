@@ -1,10 +1,16 @@
+import { cache } from 'react';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import type { Database } from '@/types/database';
 
 export type Profile = Database['public']['Tables']['users']['Row'];
 
-export async function getCurrentProfile(): Promise<Profile | null> {
+// cache() memoizes this per-request (the App Router layout, the page, and
+// any nested component all call requireProfile()/requireAdmin() — without
+// this, each call was a fresh round trip to Supabase Auth + a `users`
+// query, multiplying into several seconds of pure redundant latency on
+// every navigation).
+export const getCurrentProfile = cache(async (): Promise<Profile | null> => {
   const supabase = await createClient();
   const {
     data: { user },
@@ -19,7 +25,7 @@ export async function getCurrentProfile(): Promise<Profile | null> {
     .single();
 
   return profile;
-}
+});
 
 export async function requireProfile(): Promise<Profile> {
   const profile = await getCurrentProfile();

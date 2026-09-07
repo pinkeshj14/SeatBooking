@@ -349,6 +349,10 @@ export interface Database {
         };
         Returns: string;
       };
+      get_booking_window: {
+        Args: Record<string, never>;
+        Returns: BookingWindowRow[];
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
@@ -388,5 +392,11 @@ export interface SeatMapRow {
   default_owner_id: string | null;
   default_owner_name: string | null;
   released: boolean;
+  is_reserved_pending: boolean;
   pending_request_id: string | null;
+}
+
+export interface BookingWindowRow {
+  min_date: string;
+  max_date: string;
 }

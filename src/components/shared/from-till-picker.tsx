@@ -14,7 +14,15 @@ interface Props {
   till: Date;
   onChange: (range: { from: Date; till: Date }) => void;
   disabledBefore?: Date;
+  disabledAfter?: Date;
+  /** Disable Saturdays/Sundays — used for the daily-booking flows, not release. */
+  disableWeekends?: boolean;
   className?: string;
+}
+
+function isWeekend(date: Date) {
+  const day = date.getDay();
+  return day === 0 || day === 6;
 }
 
 /**
@@ -22,10 +30,25 @@ interface Props {
  * calendar — defaults to the same day (a 1-day release/booking) and makes it
  * obvious you can extend the "Till" date for a longer range.
  */
-export function FromTillPicker({ from, till, onChange, disabledBefore, className }: Props) {
-  const minDate = disabledBefore;
+export function FromTillPicker({
+  from,
+  till,
+  onChange,
+  disabledBefore,
+  disabledAfter,
+  disableWeekends = false,
+  className,
+}: Props) {
   const [fromOpen, setFromOpen] = useState(false);
   const [tillOpen, setTillOpen] = useState(false);
+
+  function isDisabled(date: Date, minDate?: Date) {
+    if (disabledBefore && date < disabledBefore) return true;
+    if (minDate && date < minDate) return true;
+    if (disabledAfter && date > disabledAfter) return true;
+    if (disableWeekends && isWeekend(date)) return true;
+    return false;
+  }
 
   function handleFromChange(date: Date | undefined) {
     if (!date) return;
@@ -54,13 +77,7 @@ export function FromTillPicker({ from, till, onChange, disabledBefore, className
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-auto p-0" align="start">
-            <Calendar
-              mode="single"
-              selected={from}
-              onSelect={handleFromChange}
-              disabled={minDate ? { before: minDate } : undefined}
-              autoFocus
-            />
+            <Calendar mode="single" selected={from} onSelect={handleFromChange} disabled={(d) => isDisabled(d)} autoFocus />
           </PopoverContent>
         </Popover>
       </div>
@@ -79,7 +96,7 @@ export function FromTillPicker({ from, till, onChange, disabledBefore, className
               mode="single"
               selected={till}
               onSelect={handleTillChange}
-              disabled={{ before: from }}
+              disabled={(d) => isDisabled(d, from)}
               autoFocus
             />
           </PopoverContent>

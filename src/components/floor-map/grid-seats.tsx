@@ -38,6 +38,7 @@ export function GridSeats({ seatMap, cols, currentUserId, onSeatClick }: Props) 
             status={deriveSeatStatus(seat, currentUserId)}
             occupantName={seat.occupant_name}
             isActive={seat.is_active}
+            isReservedPending={seat.is_reserved_pending}
             onClick={() => onSeatClick(seat)}
           />
         ))}

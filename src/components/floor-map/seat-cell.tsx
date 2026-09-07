@@ -9,6 +9,8 @@ interface Props {
   status: SeatStatus;
   occupantName: string | null;
   isActive: boolean;
+  /** Reserved for its owner but not yet booked — shown with a dashed border and "(reserved)" instead of solid "booked". */
+  isReservedPending?: boolean;
   onClick: () => void;
 }
 
@@ -16,7 +18,7 @@ interface Props {
  * Seat number and occupant name are both always rendered (not hidden behind
  * hover/tooltip) so the floor map is fully readable at a glance.
  */
-export function SeatCell({ seatNumber, status, occupantName, isActive, onClick }: Props) {
+export function SeatCell({ seatNumber, status, occupantName, isActive, isReservedPending, onClick }: Props) {
   const style = SEAT_STATUS_STYLES[status];
 
   return (
@@ -28,6 +30,7 @@ export function SeatCell({ seatNumber, status, occupantName, isActive, onClick }
         'flex min-h-[4.5rem] w-full flex-col items-center justify-center gap-0.5 rounded-lg border p-1.5 text-center transition-colors',
         isActive ? style.bg : 'bg-muted/40 opacity-50',
         isActive ? style.border : 'border-dashed border-muted-foreground/30',
+        isActive && isReservedPending && 'border-dashed',
         isActive ? style.text : '',
         isActive ? 'cursor-pointer' : 'cursor-not-allowed'
       )}
@@ -39,7 +42,7 @@ export function SeatCell({ seatNumber, status, occupantName, isActive, onClick }
           occupantName ? style.text || 'text-muted-foreground' : 'italic text-muted-foreground/70'
         )}
       >
-        {occupantName ?? 'Available'}
+        {occupantName ? (isReservedPending ? `${occupantName} (reserved)` : occupantName) : 'Available'}
       </span>
     </button>
   );

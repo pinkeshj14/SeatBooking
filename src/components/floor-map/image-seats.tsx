@@ -41,6 +41,7 @@ export function ImageSeats({ seatMap, floorPlanUrl, currentUserId, onSeatClick }
                 seat.is_active ? 'cursor-pointer hover:z-10 hover:scale-105' : 'cursor-not-allowed opacity-50',
                 seat.is_active ? style.bg : 'bg-muted',
                 seat.is_active ? style.border : 'border-dashed border-muted-foreground/40',
+                seat.is_active && seat.is_reserved_pending && 'border-dashed',
                 seat.is_active ? style.text : ''
               )}
             >
@@ -51,7 +52,11 @@ export function ImageSeats({ seatMap, floorPlanUrl, currentUserId, onSeatClick }
                   seat.occupant_name ? '' : 'italic opacity-70'
                 )}
               >
-                {seat.occupant_name ?? 'Available'}
+                {seat.occupant_name
+                  ? seat.is_reserved_pending
+                    ? `${seat.occupant_name} (reserved)`
+                    : seat.occupant_name
+                  : 'Available'}
               </span>
             </button>
           );

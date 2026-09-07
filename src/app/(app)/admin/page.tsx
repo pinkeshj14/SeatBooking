@@ -18,10 +18,17 @@ export default async function AdminOverviewPage({
   searchParams: Promise<SearchParams>;
 }) {
   const { location, date } = await searchParams;
-  const profile = await requireProfile();
   const supabase = await createClient();
 
-  const { data: locations } = await supabase.from('locations').select('*').order('code');
+  // None of these three depend on each other — fetch in parallel instead
+  // of one after another.
+  const [profile, locationsRes, employeesRes] = await Promise.all([
+    requireProfile(),
+    supabase.from('locations').select('*').order('code'),
+    supabase.from('users').select('id, full_name').order('full_name'),
+  ]);
+  const { data: locations } = locationsRes;
+  const { data: employees } = employeesRes;
   const activeLocation = locations?.find((l) => l.id === location) ?? locations?.[0];
 
   const viewingDateStr = date || format(new Date(), 'yyyy-MM-dd');
@@ -30,11 +37,6 @@ export default async function AdminOverviewPage({
   const { data: seatMap } = activeLocation
     ? await supabase.rpc('get_seat_map', { p_location_id: activeLocation.id, p_date: viewingDateStr })
     : { data: [] as SeatMapRow[] };
-
-  const { data: employees } = await supabase
-    .from('users')
-    .select('id, full_name')
-    .order('full_name');
 
   const rows = (seatMap as SeatMapRow[]) ?? [];
   const occupied = rows.filter((r) => r.status === 'OCCUPIED').length;
