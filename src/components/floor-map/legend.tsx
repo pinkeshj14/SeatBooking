@@ -15,6 +15,10 @@ export function FloorMapLegend() {
           </div>
         );
       })}
+      <div className="flex items-center gap-1.5">
+        <span className="h-3 w-3 rounded border-2 border-dashed border-muted-foreground/60" />
+        Reserved for owner, not booked yet
+      </div>
     </div>
   );
 }

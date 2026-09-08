@@ -4,7 +4,7 @@ import { requireProfile } from '@/lib/auth';
 import { FloorMap } from '@/components/floor-map/floor-map';
 import { DateAndLocationControls } from '@/components/shared/date-and-location-controls';
 import { MySeatPanel } from '@/components/dashboard/my-seat-panel';
-import { groupConsecutiveDates } from '@/lib/date-ranges';
+import { groupConsecutiveDates, nextWorkingDay } from '@/lib/date-ranges';
 import { getFloorPlanUrl } from '@/lib/floor-plan-url';
 import type { SeatMapRow } from '@/types/database';
 
@@ -33,7 +33,11 @@ export default async function DashboardPage({
     locations?.find((l) => l.id === profile.default_location_id) ??
     locations?.[0];
 
-  const viewingDateStr = date || format(new Date(), 'yyyy-MM-dd');
+  // Defaults to the next working day rather than today — the point of the
+  // floor map is booking ahead, and by default "today" is usually already
+  // decided one way or another. Explicitly picking a date (including today)
+  // via the date control still works as normal.
+  const viewingDateStr = date || format(nextWorkingDay(), 'yyyy-MM-dd');
   const viewingDate = new Date(`${viewingDateStr}T00:00:00`);
   const today = format(new Date(), 'yyyy-MM-dd');
 

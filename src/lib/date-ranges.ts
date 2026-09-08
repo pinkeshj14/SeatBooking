@@ -1,3 +1,18 @@
+/**
+ * Tomorrow, rolled forward past the weekend if needed — the default landing
+ * date for the employee floor map, since by default it should show a day
+ * that's actually still bookable rather than "today" (largely already
+ * decided by the time someone checks the map).
+ */
+export function nextWorkingDay(from: Date = new Date()): Date {
+  const d = new Date(from);
+  d.setDate(d.getDate() + 1);
+  while (d.getDay() === 0 || d.getDay() === 6) {
+    d.setDate(d.getDate() + 1);
+  }
+  return d;
+}
+
 /** Collapses a sorted list of ISO 'yyyy-MM-dd' dates into contiguous [start, end] ranges. */
 export function groupConsecutiveDates(dates: string[]): { start: string; end: string }[] {
   if (dates.length === 0) return [];
