@@ -353,6 +353,10 @@ export interface Database {
         Args: Record<string, never>;
         Returns: BookingWindowRow[];
       };
+      get_user_seat_conflicts: {
+        Args: { p_start_date: string; p_end_date: string; p_exclude_seat_id: string };
+        Returns: SeatConflictRow[];
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
@@ -399,4 +403,11 @@ export interface SeatMapRow {
 export interface BookingWindowRow {
   min_date: string;
   max_date: string;
+}
+
+export interface SeatConflictRow {
+  seat_id: string;
+  seat_number: string;
+  conflict_date: string;
+  hold_type: 'booked' | 'reserved';
 }

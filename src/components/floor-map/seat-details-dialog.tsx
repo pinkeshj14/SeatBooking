@@ -20,14 +20,15 @@ import { FromTillPicker } from '@/components/shared/from-till-picker';
 import { Separator } from '@/components/ui/separator';
 import { AdminSeatPanel } from '@/components/floor-map/admin-seat-panel';
 import { SEAT_STATUS_STYLES } from '@/lib/seat-status';
+import { createClient } from '@/lib/supabase/client';
 import {
   bookSeatAction,
   releaseSeatAction,
   requestSeatAction,
 } from '@/app/actions/seats';
-import type { SeatMapRow, SeatStatus } from '@/types/database';
+import type { SeatMapRow, SeatStatus, SeatConflictRow } from '@/types/database';
 import type { BookingWindow } from '@/types/booking-window';
-import { Loader2, CalendarClock } from 'lucide-react';
+import { Loader2, CalendarClock, TriangleAlert } from 'lucide-react';
 
 interface Employee {
   id: string;
@@ -47,6 +48,11 @@ interface Props {
   bookingWindow?: BookingWindow | null;
 }
 
+interface PendingBooking {
+  range: { from: Date; till: Date };
+  conflicts: SeatConflictRow[];
+}
+
 export function SeatDetailsDialog({
   open,
   onOpenChange,
@@ -61,9 +67,11 @@ export function SeatDetailsDialog({
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [checkingConflicts, setCheckingConflicts] = useState(false);
   const [dateRange, setDateRange] = useState({ from: selectedDate, till: selectedDate });
   const [confirmRange, setConfirmRange] = useState({ from: selectedDate, till: selectedDate });
   const [reason, setReason] = useState('');
+  const [pendingBooking, setPendingBooking] = useState<PendingBooking | null>(null);
 
   const isOwnConfirmedBooking = status === 'OWN' && !seat?.is_reserved_pending;
 
@@ -94,6 +102,7 @@ export function SeatDetailsDialog({
       setDateRange({ from: dateRangeStart, till: dateRangeStart });
       setConfirmRange({ from: bookable, till: bookable });
       setReason('');
+      setPendingBooking(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, seat?.seat_id]);
@@ -108,30 +117,50 @@ export function SeatDetailsDialog({
     return format(d, 'yyyy-MM-dd');
   }
 
-  function handleBook() {
+  function performBook(range: { from: Date; till: Date }) {
     startTransition(async () => {
-      const res = await bookSeatAction(seat!.seat_id, fmt(dateRange.from), fmt(dateRange.till));
+      const res = await bookSeatAction(seat!.seat_id, fmt(range.from), fmt(range.till));
       if (!res.success) {
         toast.error(res.error);
       } else {
-        toast.success(`Seat ${seat!.seat_number} booked`);
+        toast.success(
+          pendingBooking?.conflicts.length
+            ? `Seat ${seat!.seat_number} booked — your other seat for that date has been released`
+            : `Seat ${seat!.seat_number} booked`
+        );
+        setPendingBooking(null);
         onOpenChange(false);
         router.refresh();
       }
     });
   }
 
-  function handleConfirmBooking() {
-    startTransition(async () => {
-      const res = await bookSeatAction(seat!.seat_id, fmt(confirmRange.from), fmt(confirmRange.till));
-      if (!res.success) {
-        toast.error(res.error);
-      } else {
-        toast.success(`Booking confirmed for seat ${seat!.seat_number}`);
-        onOpenChange(false);
-        router.refresh();
+  // One seat per person per date: before booking, check whether the user
+  // already holds a different seat (booked, or their own default seat still
+  // in its pre-cutoff reservation window) for any date in this range. If
+  // so, confirm with them first rather than silently releasing it — the
+  // server enforces this rule regardless, but a silent auto-release without
+  // asking is exactly the "very big issue" being fixed here.
+  function attemptBook(range: { from: Date; till: Date }) {
+    setCheckingConflicts(true);
+    (async () => {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc('get_user_seat_conflicts', {
+        p_start_date: fmt(range.from),
+        p_end_date: fmt(range.till),
+        p_exclude_seat_id: seat!.seat_id,
+      });
+      setCheckingConflicts(false);
+      if (error) {
+        toast.error(error.message);
+        return;
       }
-    });
+      if (data && data.length > 0) {
+        setPendingBooking({ range, conflicts: data });
+      } else {
+        performBook(range);
+      }
+    })();
   }
 
   function handleRelease() {
@@ -163,6 +192,48 @@ export function SeatDetailsDialog({
         router.refresh();
       }
     });
+  }
+
+  if (pendingBooking) {
+    const { conflicts, range } = pendingBooking;
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+              <TriangleAlert className="h-5 w-5" />
+              Release your other seat?
+            </DialogTitle>
+            <DialogDescription>
+              You can only hold one seat per day. Booking <strong>{seat.seat_number}</strong> will
+              release the following:
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2 rounded-md border p-3 text-sm">
+            {conflicts.map((c, i) => (
+              <div key={`${c.seat_id}-${c.conflict_date}-${i}`} className="flex items-center justify-between">
+                <span className="font-medium">{c.seat_number}</span>
+                <span className="text-muted-foreground">
+                  {format(new Date(`${c.conflict_date}T00:00:00`), 'EEE, MMM d')} —{' '}
+                  {c.hold_type === 'booked' ? 'booked' : 'reserved for you'}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingBooking(null)} disabled={pending}>
+              Cancel
+            </Button>
+            <Button onClick={() => performBook(range)} disabled={pending}>
+              {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Release &amp; book {seat.seat_number}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
   }
 
   return (
@@ -204,8 +275,13 @@ export function SeatDetailsDialog({
               disabledAfter={bookingWindow?.maxDate}
               disableWeekends
             />
-            <Button size="sm" className="w-full" onClick={handleConfirmBooking} disabled={pending}>
-              {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button
+              size="sm"
+              className="w-full"
+              onClick={() => attemptBook(confirmRange)}
+              disabled={pending || checkingConflicts}
+            >
+              {(pending || checkingConflicts) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Book seat
             </Button>
           </div>
@@ -294,8 +370,8 @@ export function SeatDetailsDialog({
             </Button>
           )}
           {status === 'AVAILABLE' && (
-            <Button onClick={handleBook} disabled={pending}>
-              {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button onClick={() => attemptBook(dateRange)} disabled={pending || checkingConflicts}>
+              {(pending || checkingConflicts) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Book seat
             </Button>
           )}
