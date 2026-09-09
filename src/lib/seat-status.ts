@@ -1,5 +1,10 @@
 import type { SeatMapRow, SeatStatus } from '@/types/database';
 
+/** "Manish Goyal" -> "Manish" — keeps seat labels short enough to fit without wrapping/overlap. */
+export function firstName(fullName: string): string {
+  return fullName.trim().split(/\s+/)[0] || fullName;
+}
+
 /**
  * The DB only distinguishes AVAILABLE / OCCUPIED. OWN and PENDING are
  * viewer-relative, so they're derived client-side against the current user.

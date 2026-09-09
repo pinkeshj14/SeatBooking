@@ -98,7 +98,9 @@ order:
 | `0007_floor_plan.sql` | Custom per-location floor plan support: `locations.layout_mode`/`floor_plan_path`, `seats.pos_x`/`pos_y`, a public `floor-plans` Storage bucket with admin-only write policies, and the RPCs behind it |
 | `0008_admin_master_data.sql` | `users.is_active` (+ a trigger syncing login-email changes into `public.users`), `admin_set_user_active`/`admin_upsert_seat` RPCs, deactivated-account checks in the booking/release/request RPCs, and the seat-release **merge fix** (see § 11 below) |
 | `0009_sync_user_metadata.sql` | Trigger syncing `public.users.full_name`/`role` into `auth.users.raw_user_meta_data` both when edited via the app and via direct Supabase edits, plus a one-time backfill (see § 10.3) |
-| `0010_daily_booking.sql` | Converts default-seat occupancy from permanent to a **daily booking model**: `get_booking_window()`/`reservation_cutoff()`/working-day helpers, a re-derived `get_seat_map()` (real booking > owner's pre-cutoff reservation > available), the 3-working-day booking window + weekend guard in `book_seat_range()`, and a `release_seat_range()` fix so releasing also cancels a real booking (see § 8 below) |
+| `0010_daily_booking.sql` | Converts default-seat occupancy from permanent to a **daily booking model**: `get_booking_window()`/`reservation_cutoff()`/working-day helpers, a re-derived `get_seat_map()` (real booking > owner's pre-cutoff reservation > available), the booking-window + weekend guard in `book_seat_range()`, and a `release_seat_range()` fix so releasing also cancels a real booking (see § 8 below) |
+| `0011_one_seat_per_date.sql` | Enforces **one booked seat per person per date** everywhere (self-booking, peer-transfer approval, admin overrides): `_book_seat_range_internal()` now cancels any other seat the user holds for the same dates, and `get_user_seat_conflicts()` lets the client confirm with the user before that happens |
+| `0012_expand_booking_window.sql` | Widens `get_booking_window()` from 3 to 4 total working days (today + the next 3), matching the "next 3 working days" UI copy which refers to the days *after* today |
 
 ### Option A — Supabase CLI (recommended)
 
@@ -283,11 +285,14 @@ explicitly. This affects both employees and how the floor map derives what
    the cutoff doesn't auto-book anything — if you haven't confirmed by
    9 PM, your seat just becomes open to everyone, including you (you'd then
    book it the same way as any other open seat, if it's still in the
-   3-day window).
-3. **3 working days, starting today.** The bookable window is today (if
-   it's a working day, else the next one) plus the following 2 working
-   days — `get_booking_window()` is the single source of truth, used by
-   both the RPC guard (`book_seat_range`) and the date pickers client-side.
+   bookable window).
+3. **Today plus the next 3 working days (4 total).** The bookable window is
+   today (if it's a working day, else the next one) plus the following 3
+   working days — `get_booking_window()` (`0012_expand_booking_window.sql`)
+   is the single source of truth, used by both the RPC guard
+   (`book_seat_range`) and the date pickers client-side. The UI copy says
+   "next 3 working days" referring to the days *after* today — today itself
+   is immediately bookable on top of that.
 4. **Weekdays only.** Saturday/Sunday are never bookable; `book_seat_range`
    rejects them and the booking date pickers disable them.
 5. **Release still works exactly as before** — no window/weekday
