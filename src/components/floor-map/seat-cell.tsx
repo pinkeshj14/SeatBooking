@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { SEAT_STATUS_STYLES, firstName } from '@/lib/seat-status';
+import { getSeatStyle, firstName } from '@/lib/seat-status';
 import type { SeatStatus } from '@/types/database';
 
 interface Props {
@@ -9,7 +9,7 @@ interface Props {
   status: SeatStatus;
   occupantName: string | null;
   isActive: boolean;
-  /** Reserved for its owner but not yet booked — shown with a dashed border (see legend); no text label, to keep the cell uncluttered. */
+  /** Reserved for its owner but not yet booked — shown in red (vs. purple "Booked") with a dashed border; see legend. */
   isReservedPending?: boolean;
   onClick: () => void;
 }
@@ -20,7 +20,7 @@ interface Props {
  * full name is still available via the title tooltip on hover.
  */
 export function SeatCell({ seatNumber, status, occupantName, isActive, isReservedPending, onClick }: Props) {
-  const style = SEAT_STATUS_STYLES[status];
+  const style = getSeatStyle(status, isReservedPending);
 
   return (
     <button

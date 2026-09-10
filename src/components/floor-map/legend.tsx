@@ -1,4 +1,4 @@
-import { SEAT_STATUS_STYLES } from '@/lib/seat-status';
+import { SEAT_STATUS_STYLES, RESERVED_STYLE } from '@/lib/seat-status';
 import type { SeatStatus } from '@/types/database';
 
 const ORDER: SeatStatus[] = ['AVAILABLE', 'OWN', 'OCCUPIED', 'PENDING'];
@@ -16,8 +16,8 @@ export function FloorMapLegend() {
         );
       })}
       <div className="flex items-center gap-1.5">
-        <span className="h-3 w-3 rounded border-2 border-dashed border-muted-foreground/60" />
-        Reserved for owner, not booked yet
+        <span className={`h-3 w-3 rounded border-2 border-dashed ${RESERVED_STYLE.bg} ${RESERVED_STYLE.border}`} />
+        {RESERVED_STYLE.label}
       </div>
     </div>
   );

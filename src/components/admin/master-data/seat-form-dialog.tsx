@@ -29,6 +29,13 @@ interface Location {
   id: string;
   name: string;
   code: string;
+  cols: number;
+}
+
+interface ExistingSeat {
+  location_id: string;
+  row_idx: number;
+  col_idx: number;
 }
 
 export interface EditingSeat {
@@ -45,23 +52,39 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   seat: EditingSeat | null;
   locations: Location[];
+  /** Existing seats across all locations — used to suggest the next free grid slot for a new seat. */
+  seats?: ExistingSeat[];
 }
 
-function emptyForm(defaultLocationId: string | null): SeatInput {
+/**
+ * The next row/col after the last existing seat in this location, given its
+ * column count — e.g. adding a 51st seat to a 10-column grid full of 50
+ * lands it at row 5, col 0 (a new row after the existing 5), rather than
+ * defaulting to (0, 0) where it would visually jumble in with seat #1.
+ */
+function nextSlot(locationId: string, cols: number, seats: ExistingSeat[]): { rowIdx: number; colIdx: number } {
+  const count = seats.filter((s) => s.location_id === locationId).length;
+  const safeCols = cols > 0 ? cols : 10;
+  return { rowIdx: Math.floor(count / safeCols), colIdx: count % safeCols };
+}
+
+function emptyForm(location: Location | undefined, seats: ExistingSeat[]): SeatInput {
+  const locationId = location?.id ?? '';
+  const { rowIdx, colIdx } = locationId ? nextSlot(locationId, location!.cols, seats) : { rowIdx: 0, colIdx: 0 };
   return {
     id: null,
-    locationId: defaultLocationId ?? '',
+    locationId,
     seatNumber: '',
-    rowIdx: 0,
-    colIdx: 0,
+    rowIdx,
+    colIdx,
     isActive: true,
   };
 }
 
-export function SeatFormDialog({ open, onOpenChange, seat, locations }: Props) {
+export function SeatFormDialog({ open, onOpenChange, seat, locations, seats = [] }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [form, setForm] = useState<SeatInput>(emptyForm(locations[0]?.id ?? null));
+  const [form, setForm] = useState<SeatInput>(emptyForm(locations[0], seats));
 
   useEffect(() => {
     if (open) {
@@ -75,10 +98,24 @@ export function SeatFormDialog({ open, onOpenChange, seat, locations }: Props) {
               colIdx: seat.col_idx,
               isActive: seat.is_active,
             }
-          : emptyForm(locations[0]?.id ?? null)
+          : emptyForm(locations[0], seats)
       );
     }
-  }, [open, seat, locations]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, seat]);
+
+  // When creating a new seat, changing the location re-suggests the next
+  // free slot for THAT location instead of leaving whatever the previous
+  // location's suggestion was.
+  function handleLocationChange(locationId: string) {
+    if (!seat) {
+      const location = locations.find((l) => l.id === locationId);
+      const { rowIdx, colIdx } = location ? nextSlot(locationId, location.cols, seats) : { rowIdx: 0, colIdx: 0 };
+      setForm((f) => ({ ...f, locationId, rowIdx, colIdx }));
+    } else {
+      setForm((f) => ({ ...f, locationId }));
+    }
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -106,14 +143,14 @@ export function SeatFormDialog({ open, onOpenChange, seat, locations }: Props) {
           <DialogDescription>
             {seat
               ? 'Renaming a seat keeps its bookings, releases, and default assignment intact.'
-              : 'New seats start unplaced on an image-mode floor plan — position them from Floor Layout afterward.'}
+              : "Row/Col below are pre-filled to the next free grid slot in this location — adjust if needed. On an image-mode floor plan, position the seat from Floor Layout afterward."}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label>Location</Label>
-            <Select value={form.locationId} onValueChange={(v) => setForm((f) => ({ ...f, locationId: v }))}>
+            <Select value={form.locationId} onValueChange={handleLocationChange}>
               <SelectTrigger>
                 <SelectValue placeholder="Select location" />
               </SelectTrigger>

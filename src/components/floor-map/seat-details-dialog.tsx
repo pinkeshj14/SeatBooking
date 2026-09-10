@@ -19,7 +19,7 @@ import { Label } from '@/components/ui/label';
 import { FromTillPicker } from '@/components/shared/from-till-picker';
 import { Separator } from '@/components/ui/separator';
 import { AdminSeatPanel } from '@/components/floor-map/admin-seat-panel';
-import { SEAT_STATUS_STYLES } from '@/lib/seat-status';
+import { getSeatStyle } from '@/lib/seat-status';
 import { createClient } from '@/lib/supabase/client';
 import {
   bookSeatAction,
@@ -109,7 +109,7 @@ export function SeatDetailsDialog({
 
   if (!seat) return null;
 
-  const style = SEAT_STATUS_STYLES[status];
+  const style = getSeatStyle(status, seat.is_reserved_pending);
   const dateStr = format(selectedDate, 'yyyy-MM-dd');
   const isOwnPendingReservation = status === 'OWN' && seat.is_reserved_pending;
 

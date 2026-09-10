@@ -16,6 +16,7 @@ interface Location {
   id: string;
   name: string;
   code: string;
+  cols: number;
 }
 
 export interface SeatRow {
@@ -146,7 +147,7 @@ export function SeatsTable({ seats, locations }: Props) {
         </Table>
       </div>
 
-      <SeatFormDialog open={dialogOpen} onOpenChange={setDialogOpen} seat={editing} locations={locations} />
+      <SeatFormDialog open={dialogOpen} onOpenChange={setDialogOpen} seat={editing} locations={locations} seats={seats} />
     </div>
   );
 }

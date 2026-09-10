@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { deriveSeatStatus, SEAT_STATUS_STYLES, firstName } from '@/lib/seat-status';
+import { deriveSeatStatus, getSeatStyle, firstName } from '@/lib/seat-status';
 import type { SeatMapRow } from '@/types/database';
 
 interface Props {
@@ -26,7 +26,7 @@ export function ImageSeats({ seatMap, floorPlanUrl, currentUserId, onSeatClick }
 
         {seatMap.map((seat) => {
           const status = deriveSeatStatus(seat, currentUserId);
-          const style = SEAT_STATUS_STYLES[status];
+          const style = getSeatStyle(status, seat.is_reserved_pending);
           const x = seat.pos_x ?? 2;
           const y = seat.pos_y ?? 2;
 

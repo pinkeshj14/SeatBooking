@@ -8,7 +8,7 @@ export default async function MasterDataPage() {
   const supabase = await createClient();
 
   const [{ data: locations }, { data: users }, { data: seats }] = await Promise.all([
-    supabase.from('locations').select('id, name, code').order('code'),
+    supabase.from('locations').select('id, name, code, layout_config').order('code'),
     supabase
       .from('users')
       .select(
@@ -73,7 +73,15 @@ export default async function MasterDataPage() {
           <UsersTable users={userRows} locations={locations ?? []} seats={seatOptions} />
         </TabsContent>
         <TabsContent value="seats" className="pt-4">
-          <SeatsTable seats={seatRows} locations={locations ?? []} />
+          <SeatsTable
+            seats={seatRows}
+            locations={(locations ?? []).map((l) => ({
+              id: l.id,
+              name: l.name,
+              code: l.code,
+              cols: l.layout_config?.cols ?? 10,
+            }))}
+          />
         </TabsContent>
       </Tabs>
     </div>
