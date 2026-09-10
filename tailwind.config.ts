@@ -3,9 +3,12 @@ import type { Config } from "tailwindcss";
 const config: Config = {
     darkMode: ["class"],
     content: [
-    "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
-    "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
-    "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
+    // Scans the whole src/ tree (not just pages/components/app) — status
+    // color classes live in src/lib/seat-status.ts, which the previous
+    // narrower list didn't cover, so those utilities never made it into the
+    // compiled CSS. A blanket src/** glob avoids this recurring as new
+    // folders (hooks, utils, etc.) pick up class-name strings later.
+    "./src/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
   	extend: {
