@@ -16,13 +16,25 @@ interface Props {
  * lieu of the uniform CSS grid. Each marker always shows the seat number and
  * occupant's first name directly (full name via the title tooltip) — sized
  * to fit a short name on one line without wrapping or overlapping neighbors.
+ *
+ * The image is rendered at its natural pixel size (`max-w-none`, overriding
+ * Tailwind's default `img{max-width:100%}`) instead of being stretched or
+ * squeezed to the container width. Markers are placed by percentage of that
+ * natural size, so their pixel spacing — and therefore readability — stays
+ * constant on every screen; on a narrow phone the container scrolls/pans
+ * instead of shrinking the whole layout down until names overlap.
  */
 export function ImageSeats({ seatMap, floorPlanUrl, currentUserId, onSeatClick }: Props) {
   return (
-    <div className="overflow-auto rounded-xl border bg-card p-2">
+    <div className="max-h-[75vh] overflow-auto rounded-xl border bg-card p-2">
       <div className="relative inline-block min-w-full align-top">
         {/* eslint-disable-next-line @next/next/no-img-element -- external Supabase Storage URL, not a local asset */}
-        <img src={floorPlanUrl} alt="Floor plan" className="block h-auto w-full select-none" draggable={false} />
+        <img
+          src={floorPlanUrl}
+          alt="Floor plan"
+          className="block h-auto max-w-none select-none"
+          draggable={false}
+        />
 
         {seatMap.filter((seat) => seat.is_active).map((seat) => {
           const status = deriveSeatStatus(seat, currentUserId);
@@ -39,7 +51,11 @@ export function ImageSeats({ seatMap, floorPlanUrl, currentUserId, onSeatClick }
               title={seat.occupant_name ? `${seat.seat_number} — ${seat.occupant_name}` : seat.seat_number}
               style={{ left: `${x}%`, top: `${y}%` }}
               className={cn(
-                'absolute flex min-w-[3rem] max-w-[5rem] -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-md border-2 px-1 py-1 text-center shadow-sm transition-transform sm:min-w-[3.5rem]',
+                // Fixed size at every breakpoint — the image itself no longer
+                // shrinks on small screens (see natural-size note above), so
+                // markers no longer need to shrink either; shrinking them on
+                // mobile would just make an already-small screen harder to read.
+                'absolute flex min-w-[3.5rem] max-w-[5rem] -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-md border-2 px-1 py-1 text-center shadow-sm transition-transform',
                 seat.is_active ? 'cursor-pointer hover:z-10 hover:scale-105' : 'cursor-not-allowed opacity-50',
                 seat.is_active ? style.bg : 'bg-muted',
                 seat.is_active ? style.border : 'border-dashed border-muted-foreground/40',
@@ -47,10 +63,10 @@ export function ImageSeats({ seatMap, floorPlanUrl, currentUserId, onSeatClick }
                 seat.is_active ? style.text : ''
               )}
             >
-              <span className="text-[9px] font-bold leading-tight sm:text-[10px]">{seat.seat_number}</span>
+              <span className="text-[10px] font-bold leading-tight">{seat.seat_number}</span>
               <span
                 className={cn(
-                  'max-w-full truncate text-[8px] font-medium leading-tight sm:text-[9px]',
+                  'max-w-full truncate text-[9px] font-medium leading-tight',
                   seat.occupant_name ? '' : 'italic opacity-70'
                 )}
               >
