@@ -357,6 +357,10 @@ export interface Database {
         Args: { p_start_date: string; p_end_date: string; p_exclude_seat_id: string };
         Returns: SeatConflictRow[];
       };
+      get_my_confirmed_dates: {
+        Args: { p_seat_id: string };
+        Returns: string[];
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;

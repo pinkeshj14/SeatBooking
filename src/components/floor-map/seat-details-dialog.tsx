@@ -72,6 +72,7 @@ export function SeatDetailsDialog({
   const [confirmRange, setConfirmRange] = useState({ from: selectedDate, till: selectedDate });
   const [reason, setReason] = useState('');
   const [pendingBooking, setPendingBooking] = useState<PendingBooking | null>(null);
+  const [confirmedDates, setConfirmedDates] = useState<Date[]>([]);
 
   const isOwnConfirmedBooking = status === 'OWN' && !seat?.is_reserved_pending;
 
@@ -103,6 +104,19 @@ export function SeatDetailsDialog({
       setConfirmRange({ from: bookable, till: bookable });
       setReason('');
       setPendingBooking(null);
+      setConfirmedDates([]);
+
+      // So an admin's force-booked range (e.g. a month) shows as already
+      // booked in the "book additional days" picker instead of letting the
+      // user pick — and thus try to rebook — a date that's already theirs.
+      if (status === 'OWN' && seat) {
+        const seatId = seat.seat_id;
+        (async () => {
+          const supabase = createClient();
+          const { data } = await supabase.rpc('get_my_confirmed_dates', { p_seat_id: seatId });
+          if (data) setConfirmedDates(data.map((d) => new Date(`${d}T00:00:00`)));
+        })();
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, seat?.seat_id]);
@@ -274,6 +288,7 @@ export function SeatDetailsDialog({
               disabledBefore={bookingWindow?.minDate}
               disabledAfter={bookingWindow?.maxDate}
               disableWeekends
+              disabledDates={confirmedDates}
             />
             <Button
               size="sm"

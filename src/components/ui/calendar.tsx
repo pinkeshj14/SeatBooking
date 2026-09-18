@@ -15,6 +15,10 @@ function Calendar({
   className,
   classNames,
   showOutsideDays = true,
+  // Every month renders 6 week-rows (padded with the adjacent month's
+  // days via showOutsideDays) so the popup doesn't change height/jump
+  // around when navigating between months with 4 vs 6 calendar rows.
+  fixedWeeks = true,
   captionLayout = "label",
   buttonVariant = "ghost",
   formatters,
@@ -28,6 +32,7 @@ function Calendar({
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
+      fixedWeeks={fixedWeeks}
       className={cn(
         "bg-background group/calendar p-3 [--cell-size:2rem] [[data-slot=card-content]_&]:bg-transparent [[data-slot=popover-content]_&]:bg-transparent",
         String.raw`rtl:**:[.rdp-button\_next>svg]:rotate-180`,

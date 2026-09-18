@@ -24,7 +24,7 @@ export function ImageSeats({ seatMap, floorPlanUrl, currentUserId, onSeatClick }
         {/* eslint-disable-next-line @next/next/no-img-element -- external Supabase Storage URL, not a local asset */}
         <img src={floorPlanUrl} alt="Floor plan" className="block h-auto w-full select-none" draggable={false} />
 
-        {seatMap.map((seat) => {
+        {seatMap.filter((seat) => seat.is_active).map((seat) => {
           const status = deriveSeatStatus(seat, currentUserId);
           const style = getSeatStyle(status, seat.is_reserved_pending);
           const x = seat.pos_x ?? 2;

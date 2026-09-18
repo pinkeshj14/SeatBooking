@@ -1,12 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { format } from 'date-fns';
-import { Calendar as CalendarIcon } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
+import { DateInput } from '@/components/shared/date-input';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -17,6 +12,8 @@ interface Props {
   disabledAfter?: Date;
   /** Disable Saturdays/Sundays — used for the daily-booking flows, not release. */
   disableWeekends?: boolean;
+  /** Exact dates to disable outright — e.g. dates the user already has a confirmed booking on. */
+  disabledDates?: Date[];
   className?: string;
 }
 
@@ -25,10 +22,15 @@ function isWeekend(date: Date) {
   return day === 0 || day === 6;
 }
 
+function sameDate(a: Date, b: Date) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
 /**
  * Two explicit date fields (From / Till) rather than a single combined range
  * calendar — defaults to the same day (a 1-day release/booking) and makes it
- * obvious you can extend the "Till" date for a longer range.
+ * obvious you can extend the "Till" date for a longer range. Each field is
+ * typeable (dd/mm/yyyy) via DateInput, in addition to the calendar popup.
  */
 export function FromTillPicker({
   from,
@@ -37,70 +39,39 @@ export function FromTillPicker({
   disabledBefore,
   disabledAfter,
   disableWeekends = false,
+  disabledDates,
   className,
 }: Props) {
-  const [fromOpen, setFromOpen] = useState(false);
-  const [tillOpen, setTillOpen] = useState(false);
-
   function isDisabled(date: Date, minDate?: Date) {
     if (disabledBefore && date < disabledBefore) return true;
     if (minDate && date < minDate) return true;
     if (disabledAfter && date > disabledAfter) return true;
     if (disableWeekends && isWeekend(date)) return true;
+    if (disabledDates?.some((d) => sameDate(d, date))) return true;
     return false;
   }
 
-  function handleFromChange(date: Date | undefined) {
-    if (!date) return;
+  function handleFromChange(date: Date) {
     // Keep till >= from.
     const nextTill = till < date ? date : till;
     onChange({ from: date, till: nextTill });
-    setFromOpen(false);
   }
 
-  function handleTillChange(date: Date | undefined) {
-    if (!date) return;
+  function handleTillChange(date: Date) {
     const nextFrom = from > date ? date : from;
     onChange({ from: nextFrom, till: date });
-    setTillOpen(false);
   }
 
   return (
     <div className={cn('grid grid-cols-2 gap-3', className)}>
       <div className="space-y-1.5">
         <Label className="text-xs text-muted-foreground">From</Label>
-        <Popover open={fromOpen} onOpenChange={setFromOpen}>
-          <PopoverTrigger asChild>
-            <Button variant="outline" className="w-full justify-start text-left font-normal">
-              <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-              {format(from, 'LLL d, y')}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar mode="single" selected={from} onSelect={handleFromChange} disabled={(d) => isDisabled(d)} autoFocus />
-          </PopoverContent>
-        </Popover>
+        <DateInput value={from} onChange={handleFromChange} disabled={(d) => isDisabled(d)} />
       </div>
 
       <div className="space-y-1.5">
         <Label className="text-xs text-muted-foreground">Till</Label>
-        <Popover open={tillOpen} onOpenChange={setTillOpen}>
-          <PopoverTrigger asChild>
-            <Button variant="outline" className="w-full justify-start text-left font-normal">
-              <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-              {format(till, 'LLL d, y')}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar
-              mode="single"
-              selected={till}
-              onSelect={handleTillChange}
-              disabled={(d) => isDisabled(d, from)}
-              autoFocus
-            />
-          </PopoverContent>
-        </Popover>
+        <DateInput value={till} onChange={handleTillChange} disabled={(d) => isDisabled(d, from)} />
       </div>
     </div>
   );

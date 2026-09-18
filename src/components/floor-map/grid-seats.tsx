@@ -14,8 +14,11 @@ interface Props {
 
 export function GridSeats({ seatMap, cols, currentUserId, onSeatClick }: Props) {
   const ordered = useMemo(() => {
+    // Inactive (locked) seats don't render at all on the floor map — they're
+    // still fully manageable from Master Data, just not shown here.
     const byRow = new Map<number, SeatMapRow[]>();
     for (const seat of seatMap) {
+      if (!seat.is_active) continue;
       const row = byRow.get(seat.row_idx) ?? [];
       row.push(seat);
       byRow.set(seat.row_idx, row);

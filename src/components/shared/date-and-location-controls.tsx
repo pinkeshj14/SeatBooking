@@ -1,12 +1,10 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useTransition } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { format } from 'date-fns';
-import { Calendar as CalendarIcon, Loader2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Loader2 } from 'lucide-react';
+import { DateInput } from '@/components/shared/date-input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 
@@ -26,7 +24,6 @@ export function DateAndLocationControls({ locations, selectedLocationId, selecte
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [dateOpen, setDateOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
   function updateParam(key: string, value: string) {
@@ -55,30 +52,17 @@ export function DateAndLocationControls({ locations, selectedLocationId, selecte
         {pending && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
       </div>
 
-      <Popover open={dateOpen} onOpenChange={setDateOpen}>
-        <PopoverTrigger asChild>
-          <Button variant="outline" className="w-full justify-start sm:w-[220px]" disabled={pending}>
-            {pending ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <CalendarIcon className="mr-2 h-4 w-4" />
-            )}
-            {format(selectedDate, 'EEEE, LLL d, y')}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="end">
-          <Calendar
-            mode="single"
-            selected={selectedDate}
-            onSelect={(d) => {
-              if (!d) return;
-              updateParam('date', format(d, 'yyyy-MM-dd'));
-              setDateOpen(false);
-            }}
-            autoFocus
-          />
-        </PopoverContent>
-      </Popover>
+      <div className="flex items-center gap-2 sm:w-[220px]">
+        <span className="hidden shrink-0 text-sm text-muted-foreground sm:inline">
+          {format(selectedDate, 'EEE')}
+        </span>
+        <DateInput
+          value={selectedDate}
+          onChange={(d) => updateParam('date', format(d, 'yyyy-MM-dd'))}
+          loading={pending}
+          className="w-full"
+        />
+      </div>
     </div>
   );
 }
