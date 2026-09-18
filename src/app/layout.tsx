@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
@@ -17,6 +17,16 @@ const geistMono = localFont({
 export const metadata: Metadata = {
   title: "Office Seat Booking",
   description: "Book, release, and manage office seats across locations",
+};
+
+// Pinch-to-zoom is disabled at the page level (maximumScale/userScalable)
+// so a two-finger gesture over the floor plan zooms just that image
+// (handled by TransformWrapper in ImageSeats) instead of the whole page.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({
