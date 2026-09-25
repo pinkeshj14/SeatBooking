@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
@@ -63,6 +63,19 @@ export function FloorPlanEditor({ location, seats, floorPlanUrl }: Props) {
 
   const [positions, setPositions] = useState(initialPositions);
   const [dirty, setDirty] = useState(false);
+
+  // `useState(initialPositions)` only applies that value on first mount.
+  // This component instance doesn't remount on every location switch or
+  // post-upload refresh (same route, same component position in the tree),
+  // so without this effect `positions` kept whichever location's seat IDs it
+  // started with — then `positions.get(seat.id)!` for a *different*
+  // location's seats returned undefined, and reading `.placed` off that
+  // crashed the page right as the newly-uploaded image switched this editor
+  // into its "seats with pins" view.
+  useEffect(() => {
+    setPositions(initialPositions);
+    setDirty(false);
+  }, [initialPositions]);
 
   function handlePointerDown(seatId: string, e: React.PointerEvent<HTMLButtonElement>) {
     e.preventDefault();
@@ -237,8 +250,12 @@ export function FloorPlanEditor({ location, seats, floorPlanUrl }: Props) {
           {/* eslint-disable-next-line @next/next/no-img-element -- external Supabase Storage URL */}
           <img src={floorPlanUrl} alt="Floor plan" className="block h-auto w-full select-none" draggable={false} />
 
-          {seats.map((seat) => {
-            const pos = positions.get(seat.id)!;
+          {seats.map((seat, i) => {
+            // Falls back instead of asserting non-null: right after `seats`
+            // changes (new location, or a post-upload refresh), this render
+            // can happen before the effect above has resynced `positions`
+            // to match — a stale/missing entry here must not crash the page.
+            const pos = positions.get(seat.id) ?? { ...scatterDefault(i), placed: false };
             return (
               <button
                 key={seat.id}
